@@ -1,76 +1,89 @@
 ﻿#include <iostream>
 #include <vector>
+#include <list>
 
 using namespace std;
 
+const char MatchesSingleCharacter = '.';
+const char MatchesMultiCharacter = '*';
+
 struct Regular {
-    string preMatches = "";
+    bool isMatches = false;
+    char matches = '/0';
     string text = "";
     int backStringCount = 0;
 
-    Regular(string preMatches, string text, int backStringCount) {
-        preMatches = preMatches;
-        text = text;
-        backStringCount = backStringCount;
+    Regular(char matches) {
+        this->isMatches = true;
+        this->matches = matches;
     }
 
-    bool hasPreMatches() {
-        return preMatches.size() > 0;
+    Regular(string text) {
+        this->text = text;
     }
 
-    int getStringLength() {
-        return text.size();
+    int getStringCount() {
+        return text.size() + backStringCount;
     }
 };
 
 vector<Regular> split(string p) {
-    vector<Regular> regularVector;
-    string preMatches = "";
+    vector<Regular> regularList;
     string text = "";
-
-    int offset = 0;
-    int len = 0;
+    char lastWord = '\0';
+    char lastMatches = '\0';
 
     for (int i = 0; i < p.size(); ++i) {
-        if (p[i] == '*') {
-            preMatches += p[i - 1];
-            offset = i + 1;
+        if (p[i] == MatchesMultiCharacter) {
+            if (lastWord != '\0') {
+                if (text != "") {
+                    regularList.push_back(Regular(text));
+                    text = "";
+                }
+
+                if (lastMatches != '\0') {
+                    if (lastMatches != lastWord)
+                        regularList.push_back(lastWord);
+                }
+                else {
+                    regularList.push_back(lastWord);
+                }
+
+                lastMatches = lastWord;
+                lastWord = '\0';
+            }
         }
         else {
+            if (lastWord != '\0') {
+                text += lastWord;
+            }
 
-        }
-        if (p[i] != '*') {
-            if (i + 1 < p.size() && p[i + 1] == '*') {
-                if (preMatches.size() == 0 || preMatches[preMatches.size() - 1] != p[i])
-                    preMatches += p[i];
-            }
-            else {
-                text += p[i];
-                regularVector.push_back(Regular(preMatches, text, 0));
-                text = "";
-                text.substr()
-            }
+            lastMatches = '\0';
+            lastWord = p[i];
         }
     }
+
+    if (lastWord != '\0')
+        text += lastWord;
+    if (text != "")
+        regularList.push_back(Regular(text));
 
     int size = 0;
-    string nextText = "";
-    for (int i = regularVector.size() - 1; i >= 0; --i) {
-        regularVector[i].backStringCount = size;
-        nextText = regularVector[i].text;
-        size = regularVector[i].getStringLength();
+    for (int i = regularList.size() - 1; i >= 0; --i) {
+        regularList[i].backStringCount = size;
+        size += regularList[i].text.size();
     }
 
-    return regularVector;
+    return regularList;
 }
 
-bool startWith(const string& s, int offset, const string& p) {
+bool compareText(const string& s, int offset, const string& p) {
     if (s.size() < p.size()) {
         return false;
     }
 
     for (int i = 0; i < p.size(); ++i) {
-        if (s[i + offset] == p[i] || p[i] == '.')
+        if (s[i + offset] == p[i] || p[i] == MatchesSingleCharacter)
             continue;
 
         return false;
@@ -79,44 +92,54 @@ bool startWith(const string& s, int offset, const string& p) {
     return true;
 }
 
-bool endWith(const string& s, const string& p) {
-    int sSize = s.size();
-    int pSize = p.size();
-    for (int i = 1; i <= pSize; ++i) {
-        if (p[pSize - i] == '.' || s[sSize - i] == p[pSize - i])
-            continue;
+bool match(const string& s, int offset, vector<Regular>& regularList, int index) {
+    for (int i = offset; i < s.size(); ++i) {
+        if (s.size() - i < regularList[index].getStringCount())
+            return false;
 
-        return false;
-    }
+        if (regularList[index].isMatches) {
+            if (s[i] == regularList[index].matches || regularList[index].matches == MatchesSingleCharacter) {
+                if (index == regularList.size() - 1) {
+                    continue;
+                }
 
-    return true;
-}
+                if (i == s.size() - 1 && regularList[index].backStringCount == 0) {
+                    return true;
+                }
 
-int find(const string& s, int offset, int interval, Regular& p) {
-    if (!p.hasPreMatches()) {
-        return startWith(s, offset, p.text) ? offset + p.getStringLength() : -1;
-    }
+                if (match(s, i, regularList, index + 1))
+                    return true;
 
-    int succesOffset = -1;
-    for (int i = offset; i < offset + interval; ++i) {
-        if (s[i] == p.preMatches) {
-            if (p.getStringLength() > 0) {
-                if (startWith(s, offset, p.text))
-                    succesOffset = i;
+                if (i == s.size() - 1) {
+                    return false;
+                }
             }
             else {
-                succesOffset = i;
-            }
-        }
-        else {
-            if (startWith(s, offset, p.text))
-                succesOffset = i;
+                if (index == regularList.size() - 1) {
+                    return false;
+                }
 
-            break;
+                return match(s, i, regularList, index + 1);
+            }
+        } else {
+            if (!compareText(s, i, regularList[index].text)) {
+                return false;
+            }
+
+            if (regularList[index].backStringCount == 0) {
+                if (i == s.size() - regularList[index].text.size())
+                    return true;
+            }
+
+            if (index == regularList.size() - 1) {
+                return s.size() - i - regularList[index].text.size() == 0;
+            }
+
+            return match(s, i + regularList[index].text.size(), regularList, index + 1);
         }
     }
 
-    return succesOffset == -1 ? -1 : succesOffset + p.getStringLength();
+    return true;
 }
 
 bool isMatch(string s, string p) {
@@ -125,34 +148,15 @@ bool isMatch(string s, string p) {
         return s == "";
     }
 
-    vector<Regular> v = split(p);
-    int miniOffset = 0;
-    int miniInterval = 0;
+    vector<Regular> regularList = split(p);
 
-    for (int i = 0; i < v.size(); ++i) {
-        miniInterval = s.size() - miniOffset - v[i].getStringLength();
-        if (miniInterval <= 0)
-            return false;
-
-        miniOffset = find(s, i, miniInterval, v[i]);
-        if (miniOffset < 0)
-            return false;
-
-        if (s.size() == miniOffset)
-            return v[i].backStringCount == 0;
-
-        if (i + 1 == v.size()) {
-            return miniOffset == 0;
-        }
-    }
-
-    return true;
+    return match(s, 0, regularList, 0);
 }
 
 int main()
 {
-    string s = "abcabc";
-    string p = "a*b*c*ab";
+    string s = "abbabaaaaaaacaa";
+    string p = "a*.*b.a.*c*b*a*c*";
 
     cout << (isMatch(s, p) ? "true" : "false");
 
